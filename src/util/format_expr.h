@@ -16,4 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 //! that is inspired by C/C++/Java, and is meant for debugging
 std::ostream &format_rec(std::ostream &, const exprt &);
 
+void add_format_hook(irep_idt, std::function<std::ostream &(std::ostream &, const exprt &)>);
+
 #endif // CPROVER_UTIL_FORMAT_EXPR_H
