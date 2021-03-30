@@ -13,6 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "arith_tools.h"
 #include "byte_operators.h"
+#include "c_types.h"
 #include "expr.h"
 #include "expr_iterator.h"
 #include "fixedbv.h"
@@ -184,8 +185,26 @@ static std::ostream &format_rec(std::ostream &os, const constant_exprt &src)
     return os << '"' << escape(id2string(src.get_value())) << '"';
   else if(type == ID_floatbv)
     return os << ieee_floatt(src);
-  else if(type == ID_pointer && src.is_zero())
-    return os << src.get_value();
+  else if(type == ID_pointer)
+  {
+    if(src.is_zero())
+      return os << ID_NULL;
+    else if(src.operands().size() == 1)
+    {
+      const auto &unary_expr = to_unary_expr(src);
+      const auto &pointer_type = to_pointer_type(src.type());
+      return os << "pointer(" << format(unary_expr.op())
+                << ", " << format(pointer_type.subtype()) << ')';
+    }
+    else
+    {
+      const auto &pointer_type = to_pointer_type(src.type());
+      const auto width = pointer_type.get_width();
+      auto int_value = bvrep2integer(src.get_value(), width, false);
+      return os << "pointer(0x" << integer2string(int_value, 16)
+                << ", " << format(pointer_type.subtype()) << ')';
+    }
+  }
   else
     return os << src.pretty();
 }
