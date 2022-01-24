@@ -39,6 +39,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "dump_c.h"
 #include "generate_function_bodies.h"
 #include "insert_final_assert_false.h"
+#include "model_argc_argv.h"
 #include "nondet_volatile.h"
 #include "replace_calls.h"
 #include "uninitialized.h"
@@ -95,7 +96,8 @@ Author: Daniel Kroening, kroening@kroening.com
   "(interpreter)(show-reaching-definitions)" \
   "(list-symbols)(list-undefined-functions)" \
   "(z3)(add-library)(show-dependence-graph)" \
-  "(horn)(skip-loops):(model-argc-argv):" \
+  "(horn)(skip-loops):" \
+  OPT_ARGC_ARGV \
   "(" FLAG_LOOP_CONTRACTS ")" \
   "(" FLAG_REPLACE_CALL "):" \
   "(" FLAG_ENFORCE_CONTRACT "):" \

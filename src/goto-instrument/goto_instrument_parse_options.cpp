@@ -14,6 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <sstream>
 
 #include <util/exception_utils.h>
 #include <util/exit_codes.h>
@@ -92,7 +93,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "interrupt.h"
 #include "k_induction.h"
 #include "mmio.h"
-#include "model_argc_argv.h"
 #include "nondet_static.h"
 #include "nondet_volatile.h"
 #include "points_to.h"
@@ -1054,10 +1054,38 @@ void goto_instrument_parse_optionst::instrument_goto_program()
   {
     unsigned max_argc=
       safe_string2unsigned(cmdline.get_value("model-argc-argv"));
+    std::list<std::string> argv;
+    argv.resize(max_argc);
 
     log.status() << "Adding up to " << max_argc << " command line arguments"
                  << messaget::eom;
-    if(model_argc_argv(goto_model, max_argc, ui_message_handler))
+
+    if(model_argc_argv(
+         goto_model, argv, true /*model_argv*/, ui_message_handler))
+      throw 0;
+  }
+
+  if(cmdline.isset("add-cmd-line-arg"))
+  {
+    const std::list<std::string> &argv = cmdline.get_values("add-cmd-line-arg");
+    unsigned argc = 0;
+
+    std::stringstream ss;
+    ss << "[";
+    std::string sep = "";
+    for(auto const &arg : argv)
+    {
+      ss << sep << "\"" << arg << "\"";
+      argc++;
+      sep = ", ";
+    }
+    ss << "]";
+
+    log.status() << "Adding " << argc << " arguments: " << ss.str()
+                 << messaget::eom;
+
+    if(model_argc_argv(
+         goto_model, argv, false /*model_argv*/, ui_message_handler))
       throw 0;
   }
 
@@ -1831,7 +1859,7 @@ void goto_instrument_parse_optionst::help()
     HELP_REMOVE_CONST_FUNCTION_POINTERS
     " --add-library                add models of C library functions\n"
     HELP_CONFIG_LIBRARY
-    " --model-argc-argv <n>        model up to <n> command line arguments\n"
+    HELP_ARGC_ARGV
     // NOLINTNEXTLINE(whitespace/line_length)
     " --remove-function-body <f>   remove the implementation of function <f> (may be repeated)\n"
     HELP_REPLACE_CALLS

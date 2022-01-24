@@ -305,7 +305,7 @@ bool cmdlinet::parse_arguments(int argc, const char **argv)
           i++;
           if(i == argc)
             return true;
-          if(argv[i][0] == '-' && argv[i][1] != 0)
+          if(options[*optnr].optstring != "add-cmd-line-arg" && argv[i][0] == '-' && argv[i][1] != 0)
             return true;
           options[*optnr].values.push_back(argv[i]);
         }
