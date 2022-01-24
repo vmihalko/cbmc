@@ -30,15 +30,51 @@ Date: April 2016
 #include <goto-programs/goto_model.h>
 #include <goto-programs/remove_skip.h>
 
-/// Set up argv with up to max_argc pointers into an array of 4096 bytes.
+// Escape selected character in specified string with backslashes.
+//
+// \param input_string: string where character will be escaped.
+// \param find_substring: character to escape, e.g. \"
+// \param replace_substring: string, e.g. \\\"
+std::string escape_char(
+    std::string input_string,
+    std::string find_substring,
+    std::string replace_substring){
+  size_t index = 0;
+    while (true) {
+      /* Locate the substring to replace. */
+      index = input_string.find(find_substring, index);
+
+      if (index == std::string::npos) break;
+
+      /* Make the replacement. */
+      input_string.replace(index,
+                           replace_substring.size(),
+                           replace_substring);
+
+      /* Advance index forward so the next iteration
+       * doesn't pick it up as well. */
+      index += replace_substring.size();
+    }
+  return input_string;
+}
+
+/// Set up argv to user-specified values (when model_argv is FALSE) or
+/// (when model_argv is TRUE) set up argv with up to max_argc pointers
+/// into a char array of 4096 bytes.
+///
 /// \param goto_model: Contains the input program's symbol table and
 ///   intermediate representation
-/// \param max_argc: User-specified maximum number of arguments to be modelled
+/// \param argv_args: User-specified cmd-line arguments (ARGV),
+///   when model_argv is TRUE then size of argv_args represents
+///   the maximum number of arguments to be modelled
+/// \param model_argv: If set to TRUE then modelling argv with up to
+///   max_argc pointers
 /// \param message_handler: message logging
 /// \return True, if and only if modelling succeeded
 bool model_argc_argv(
   goto_modelt &goto_model,
-  unsigned max_argc,
+  const std::list<std::string> &argv_args,
+  bool model_argv,
   message_handlert &message_handler)
 {
   messaget message(message_handler);
@@ -83,25 +119,52 @@ bool model_argc_argv(
   // guaranteed by POSIX (_POSIX_ARG_MAX):
   // http://pubs.opengroup.org/onlinepubs/009695399/basedefs/limits.h.html
   std::ostringstream oss;
-  oss << "int ARGC;\n"
-      << "char *ARGV[1];\n"
-      << "void " << goto_model.goto_functions.entry_point() << "()\n"
-      << "{\n"
-      << "  unsigned next=0u;\n"
-      << "  " CPROVER_PREFIX "assume(ARGC>=1);\n"
-      << "  " CPROVER_PREFIX "assume(ARGC<=" << max_argc << ");\n"
-      << "  char arg_string[4096];\n"
-      << "  " CPROVER_PREFIX "input(\"arg_string\", &arg_string[0]);\n"
-      << "  for(int i=0; i<ARGC && i<" << max_argc << "; ++i)\n"
-      << "  {\n"
-      << "    unsigned len;\n"
-      << "    " CPROVER_PREFIX "assume(len<4096);\n"
-      << "    " CPROVER_PREFIX "assume(next+len<4096);\n"
-      << "    " CPROVER_PREFIX "assume(arg_string[next+len]==0);\n"
-      << "    ARGV[i]=&(arg_string[next]);\n"
-      << "    next+=len+1;\n"
-      << "  }\n"
-      << "}";
+  unsigned max_argc = argv_args.size();
+  unsigned argc = argv_args.size();
+
+  if(model_argv)
+  {
+    oss << "int ARGC;\n"
+        << "char *ARGV[1];\n"
+        << "void " << goto_model.goto_functions.entry_point() << "()\n"
+        << "{\n"
+        << "  unsigned next=0u;\n"
+        << "  " CPROVER_PREFIX "assume(ARGC>=1);\n"
+        << "  " CPROVER_PREFIX "assume(ARGC<=" << max_argc << ");\n"
+        << "  char arg_string[4096];\n"
+        << "  " CPROVER_PREFIX "input(\"arg_string\", &arg_string[0]);\n"
+        << "  for(int i=0; i<ARGC && i<" << max_argc << "; ++i)\n"
+        << "  {\n"
+        << "    unsigned len;\n"
+        << "    " CPROVER_PREFIX "assume(len<4096);\n"
+        << "    " CPROVER_PREFIX "assume(next+len<4096);\n"
+        << "    " CPROVER_PREFIX "assume(arg_string[next+len]==0);\n"
+        << "    ARGV[i]=&(arg_string[next]);\n"
+        << "    next+=len+1;\n"
+        << "  }\n"
+        << "}";
+  }
+  else
+  { // model_argv = false, set each argv[i] explicitly
+    oss << "int ARGC = " << argc << ";\n"
+        << "char *ARGV[" << argc << "];\n"
+        << "void " << goto_model.goto_functions.entry_point() << "()\n"
+        << "{\n"
+        << "ARGC = " << argc << ";\n";
+    int i = 0;
+    for(auto &arg : argv_args)
+    {
+      oss << "ARGV[" << i << "]=\"" << escape_char(
+                                        escape_char(
+                                          escape_char(arg, "\\","\\\\"),
+                                            "\'","\\\'"),
+                                              "\"","\\\"")
+                                    << "\";\n";
+      i++;
+    }
+    oss << "}";
+  }
+
   std::istringstream iss(oss.str());
 
   ansi_c_languaget ansi_c_language;
@@ -169,6 +232,22 @@ bool model_argc_argv(
       main_call!=end;
       ++main_call)
   {
+    //Turn into skip instr. the INPUT(argc ...) instruction
+    if (main_call->is_other() &&
+        main_call->get_other().get_statement() == ID_input &&
+        "argc\'" == id2string(to_symbol_expr(
+            main_call->get_other().op1()).get_identifier())) {
+      main_call->turn_into_skip();
+    }
+
+    //Turn into skip instr. the ASSUME(argc ...) instruction
+    if(main_call->is_assume() &&
+        "argc\'" == id2string(to_symbol_expr(
+            main_call->condition().operands()[0]).get_identifier())){
+
+      main_call->turn_into_skip();
+    }
+
     if(main_call->is_function_call())
     {
       const exprt &func = main_call->call_function();
